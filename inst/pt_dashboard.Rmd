@@ -1,0 +1,246 @@
+---
+title: "Perturbation Table Dashboard"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+```
+
+Sidebar {.sidebar}
+=====================================
+
+### Parameter Input
+
+```{r}
+
+
+
+textInput("label",
+          "Parturbation Label",
+          paste("CKM_D", 3, "_V", 1.05 * 100, sep = ""))
+
+sliderInput(
+  "D",
+  label = "Maximum Perturbation (=D)",
+  min = 1,
+  max = 10,
+  value = 3,
+  step = 1
+)
+numericInput(
+  inputId = "V",
+  label = "Variance (=V)",
+  value = 1.05,
+  min = 0.1,
+  max = 5,
+  step = 0.1,
+  width = "100px"
+)
+sliderInput(
+  "js",
+  label = "Treshold (=js)",
+  min = 0,
+  max = 5,
+  value = 1,
+  step = 1
+)
+
+numericInput(
+  inputId = "pstay",
+  label = "Preset probability of frequencies not to be perturbed (=pstay)",
+  value = NA,
+  min = 0.05,
+  max = 0.99,
+  step = 0.05,
+  width = "200px"
+)
+
+checkboxInput("mono", "Set Monotony", value = TRUE, width = NULL)
+radioButtons("optim",
+             "Set of objective functions (=optim)",
+             c("Standard" = 1,
+               "Alternative" = 4))
+
+# TODO: input for pTableSize with respect to ncat.
+
+params <- reactive({
+  pt_create_pParams(
+    D = input$D,
+    V = input$V,
+    js = input$js,
+    pstay = input$pstay,
+    label = input$label,
+    mono = input$mono,
+    optim = as.integer(input$optim),
+    step = 1
+  )
+})
+res <- reactive({
+  pt_create_pTable(params = params())
+})
+
+inputcode <- reactive({
+  noquote(
+    paste0(
+      "create_cnt_ptable(D = ",
+      input$D,
+      ", V = ",
+      input$V,
+      ", js = ",
+      input$js,
+      ", pstay = ",
+      input$pstay,
+      ", label = '",
+      input$label,
+      "', mono = ",
+      input$mono,
+      ", optim = ",
+      as.integer(input$optim),
+      ")",
+      sep = " "
+    )
+  )
+})
+
+```
+
+
+
+<!-- **Save the Output** -->
+
+```{r download, echo=FALSE, eval=FALSE}
+downloadHandler(
+  filename = function() {
+    paste("graph-", Sys.Date(), ".pdf", sep = "")
+  },
+  contentType = "image/pdf",
+  outputArgs = "Graph",
+  content = function(file) {
+    fifi_plot(res(), file = file)
+    # TODO: replace by new argument 'file'
+  }
+)
+cat("\n")
+downloadHandler(
+  filename = function() {
+    paste("ptable-", Sys.Date(), ".csv", sep = "")
+  },
+  contentType = "text/csv",
+  outputArgs = "pTable",
+  content = function(file) {
+    out <- res()
+    write.table(
+      format(out@pTable[i >= 0, c('i', 'j', 'p', 'v', 'p_int_ub'), ], digits =
+               8),
+      file,
+      sep = ";",
+      dec = ".",
+      row.names = FALSE,
+      col.names = TRUE,
+      quote = FALSE
+    )
+    # TODO: replace by pt_export
+    #pt_export(input = out, file = file)
+  }
+)
+```
+
+
+Results {.tabset}
+=====================================
+
+Columns {.tabset}
+-------------------------------------
+
+
+
+### Perturbation Table 
+
+```{r}
+library(DT)
+renderTable(
+  res()@pTable[i >= 0, c("i", "j", "p", "v", "p_int_lb", "p_int_ub"),], 
+  digits = 8)
+#options = list(scrollX = TRUE, sScrollY = '75vh', scrollCollapse = TRUE))
+```
+
+### Constraints Check {data-width=100}
+
+```{r}
+renderTable({
+  res()@empResults[i > 0, , ]
+}, digits = 3)
+```
+
+### Input Code {data-width=175}
+
+\
+*Copy the following code and paste it into your r-script or console to replicate 
+the perturbation table you have created:*
+
+```{r}
+
+renderText({
+  inputcode()
+})
+```
+
+### Input Object {data-width=175}
+
+```{r}
+renderPrint({
+  params()
+})
+```
+
+### Legend {data-width=75}
+
+parameter     | description
+---------------- | ------------------------
+i  | original frequency
+j | target frequency
+p | perturbation probability
+v | perturbation value / noise
+p_int_lb | lower bound of p (within each frequency i)
+p_int_ub | upper bound of p (within each frequency i)
+p_mean   | mean of probabilities for given original frequency
+p_var | variance of probabilities for given original frequency
+p_sum | sum of probabilities for given original frequency
+p_stay | probability for a given original frequency not to be perturbed
+
+
+Visualization {.tabset}
+=====================================
+
+Columns {.tabset}
+-------------------------------------
+
+
+### Transition Matrix
+
+```{r}
+renderPlot({
+  fifi_plot(res(), type = "t")
+})
+```
+
+### Distribution
+
+```{r}
+renderPlot({
+  fifi_plot(res())
+})
+```
+
+### Perturbation Panel
+
+```{r}
+renderPlot({
+  fifi_plot(res(), type = "p")
+})
+```
